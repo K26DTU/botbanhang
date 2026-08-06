@@ -1100,11 +1100,11 @@ CATALOG = [
                 "require_hint": "Yêu cầu: quốc gia | SL",
             },
             {
-                "item_id": "TIKTOK_WHITE",
+                "item_id": "TIKTOK_BUILDS",
                 "group": "TIKTOK",
                 "name": "Tiktok US nhiều FL xây kênh, nhắn admin lấy link kênh và giá từng kênh tùy follow ",
-                "price": "300.000đ",
-                "detail": "🔥 **Kênh TikTok full chức năng Live**\n✅ Bao back – bao login\n🛡️ Bảo hành **1 đổi 1 trong 24 giờ** kể từ khi giao kênh nếu kênh chưa Live nhưng bị cấm Live vĩnh viễn\n⚠️ Không bảo hành trường hợp đang Live thì bị sập Live\n🛠️ Lưu ý: **Khách tự fix Live**\n💰 Giá: **150.000đ/kênh**",
+                "price": "2.000đ",
+                "detail": "🎵 **Tiktok xây kênh 1K - 50K follow**\n💰 Giá: **2.000đ**\n📌 Quốc gia: **Việt - US - UK**",
                 "require_hint": "Yêu cầu: quốc gia | SL",
             },
             {
@@ -1112,7 +1112,7 @@ CATALOG = [
                 "group": "TIKTOK",
                 "name": "Tiktok LIVE (Việt Cổ)",
                 "price": "150.000đ",
-                "detail": "🎵 **Tài khoản Tiktok LIVE**\n💰 Giá: **250.000đ**\n📌 Quốc gia: **Việt - US - UK**\n📌 Bao log, bao back, bao hạn chế 5p, bao ngắt.",
+                "detail": "🎵 **Tài khoản Tiktok LIVE**\n💰 Giá: **150.000đ**\n📌 Quốc gia: **Việt - US - UK**\n📌 Bao log, bao back, bao hạn chế 5p, bao ngắt.",
                 "require_hint": "Yêu cầu: quốc gia | SL",
             },
             {

@@ -1,4 +1,3 @@
-
 import os
 import sqlite3
 import time
@@ -14,13 +13,13 @@ from flask import Flask, request
 # =========================
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 
-ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "@min_max1834").strip()  # @username
-ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "0"))  # optional - recommended
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "@min_max18344").strip()  # @username
+ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "7540411330"))  # optional - recommended
 SHOP_NAME = os.getenv("SHOP_NAME", "VUSMILE").strip()
 
 BANK_NAME = os.getenv("BANK_NAME", "VCB").strip()
-ACCOUNT_NAME = os.getenv("ACCOUNT_NAME", "NGUYEN THI HUYEN").strip()
-ACCOUNT_NO = os.getenv("ACCOUNT_NO", "1020905207").strip()
+ACCOUNT_NAME = os.getenv("ACCOUNT_NAME", "PHAM DINH MINH VU").strip()
+ACCOUNT_NO = os.getenv("ACCOUNT_NO", "0812810305").strip()
 
 DB_PATH = os.getenv("DB_PATH", "data.db")
 
@@ -163,9 +162,21 @@ CATALOG = [
             {
                 "item_id": "TELE_PACK",
                 "group": "TELE",
-                "name": " Telegram cào 50 số",
+                "name": "📌TELE CÀO 50 SỐ - CỔ TRÂU",
                 "price": "80.000đ",
-                "detail": "🐙 **Gói số điện thoại đăng ký**\n💰 Giá: **80.000đ**\n📌 Hỗ trợ đăng nhập ban đầu\n🎁 bảo hành 1 đổi 1 nếu tài khoản bị đóng băng",
+                "detail": (
+                    "✅ Hỗ trợ đăng nhập ban đầu\n"
+                    "✅ Tài khoản cứng, ổn định, sử dụng bền\n"
+                    "✅ Có thể dùng làm boss theo nhu cầu\n"
+                    "🎁 Bảo hành 1 đổi 1 trong 24h nếu tài khoản bị đóng băng đúng điều kiện\n\n"
+                    "📌 Lưu ý khi sử dụng:\n"
+                    "🔹 Chỉ log bằng file 1 lần duy nhất\n"
+                    "🔹 Muốn log sang thiết bị khác cần log thủ công bằng SĐT\n"
+                    "🔹 Log 2 thiết bị bằng file dẫn đến acc bị đăng xuất sẽ không bảo hành\n\n"
+                    "📣 Điều kiện bảo hành:\n"
+                    "🎥 Cần quay video từ lúc mở acc đến quá trình kiểm tra sử dụng để shop hỗ trợ bảo hành.\n\n"
+                    "⚠️ Tuyệt đối không dán file .exe vào thư mục khi file chưa được giải nén hoàn toàn."
+                ),
                 "require_hint": "Ghi chú: . . ., Số lượng :  ",
             },
             {
@@ -220,36 +231,29 @@ CATALOG = [
         "img_key": "CAT_TELE",
     },
     {
-        "cat_id": "TIKTOK",
-        "title": "🎵 TIKTOK",
-        "desc": "🎵 **TIKTOK – Danh mục sản phẩm**\n👉 Chọn mục bên dưới 👇",
+        "cat_id": "DOMAIN",
+        "title": "🌐 TÊN MIỀN",
+        "desc": (
+            "🌐 **Giá – 370K / 1 domain .CLICK  .PRO	.LIVE	.LOVE	.VIP    .ONLINE    .SHOP	.ORG	.STORE	.TECH	.XYZ	.FUN	**\n"
+            "✅ Bảo hành suốt thời gian sử dụng\n"
+            "✅ Đổi hậu đài ~ 3 phút\n"
+            "👉 Chọn mục bên dưới 👇"
+        ),
         "items": [
             {
-                "item_id": "TIKTOK_WHITE",
-                "group": "TIKTOK",
-                "name": "Tiktok trắng xây kênh ",
-                "price": "40.000đ",
-                "detail": "🎵 **Tiktok trắng để xây kênh**\n💰 Giá: **40.000đ**\n📌 Quốc gia: **Việt - US - UK**\n📌 Phù hợp xây kênh mới",
-                "require_hint": "Yêu cầu: quốc gia | SL",
-            },
-            {
-                "item_id": "TIKTOK_BUILD",
-                "group": "TIKTOK",
-                "name": "Tiktok xây kênh 1-2K follow ",
-                "price": "200.000đ",
-                "detail": "🎵 **Tiktok xây kênh 1K - 2K follow**\n💰 Giá: **200.000đ**\n📌 Quốc gia: **Việt - US - UK**",
-                "require_hint": "Yêu cầu: quốc gia | SL",
-            },
-            {
-                "item_id": "TIKTOK_LIVE",
-                "group": "TIKTOK",
-                "name": "Tiktok LIVE (Việt - US - UK)",
-                "price": "250.000đ",
-                "detail": "🎵 **Tài khoản Tiktok LIVE**\n💰 Giá: **250.000đ**\n📌 Quốc gia: **Việt - US - UK**\n📌 Bao log, bao back, bao hạn chế 5p, bao ngắt.",
-                "require_hint": "Yêu cầu: quốc gia | SL",
+                "item_id": "DOMAIN_370",
+                "group": "TÊN MIỀN",
+                "name": "Tên miền đồng giá: .CLICK  .PRO	.LIVE	.LOVE	.VIP    .ONLINE    .SHOP	.ORG	.STORE	.TECH	.XYZ	.FUN",
+                "price": "370.000đ",
+                "detail": (
+                    "✅ Bảo hành suốt thời gian sử dụng\n"
+                    "✅ Đổi hậu đài ~ 3 phút\n\n"
+                    "📌 Khi mua, ghi rõ **đuôi** (...) và **keyword**."
+                ),
+                "require_hint": "Ghi chú keyword/đuôi : ...",
             },
         ],
-        "img_key": "CAT_TIKTOK",
+        "img_key": "CAT_DOMAIN",
     },
     {
         "cat_id": "FB",
@@ -313,18 +317,10 @@ CATALOG = [
                 "require_hint": "Ghi chú: . . ., Số lượng :  ",
             },
             {
-                "item_id": "PAGE_1K",
-                "group": "FACEBOOK",
-                "name": "PAGE CỐ KHÁNG 1K FLOW",
-                "price": "250.000đ",
-                "detail": "📄 **CỐ KHÁNG 1K FLOW**\n💰 Giá: **200.000đ**",
-                "require_hint": "Ghi chú: . . ., Số lượng :  ",
-            },
-            {
                 "item_id": "PAGE_5K",
                 "group": "FACEBOOK",
                 "name": "PAGE CỐ KHÁNG 5K FLOW",
-                "price": "450.000đ",
+                "price": "300.000đ",
                 "detail": "📄 **CỐ KHÁNG 5K FLOW**\n💰 Giá: **450.000đ**",
                 "require_hint": "Ghi chú: . . ., Số lượng :  ",
             },
@@ -340,9 +336,71 @@ CATALOG = [
         "img_key": "CAT_FB",
     },
     {
+        "cat_id": "ZALO",
+        "title": "💬 ZALO",
+        "desc": "💬 **ZALO – Danh mục sản phẩm**\n👉 Chọn mục bên dưới 👇",
+        "items": [
+            {
+                "item_id": "ZALO_TRUST",
+                "group": "ZALO",
+                "name": "ZALO NGÂM TRUST – ĐÃ XMDT",
+                "price": "500.000đ",
+                "detail": (
+                    "✅ **ZALO NGÂM TRUST – ĐÃ XMDT** ✅\n\n"
+                    "💎 Trust Device: **500.000đ**\n"
+                    "📌 Đã XMDT\n"
+                    "🌐 Kèm Proxy\n"
+                    "🛡️ Tài khoản đã ngâm Trust, phù hợp cho anh em cần độ ổn định cao hơn\n\n"
+                    "🔐 **CHẾ ĐỘ BẢO HÀNH**\n\n"
+                    "✅ Zalo các loại chỉ bảo hành khi treo ngâm đủ 3 ngày\n"
+                    "✅ Zalo bảo hành SIM 10 ngày kể từ khi giao hàng\n"
+                    "✅ Shop hỗ trợ đá và đổi số cho khách\n\n"
+                    "⚠️ **Lưu ý quan trọng:**\n"
+                    "❌ Khi đã thay đổi thông tin hoặc đem đi cào sẽ không bảo hành\n"
+                    "📌 Trong 10 ngày giữ SIM, khách cần đổi SIM của mình vào tài khoản.\n"
+                    "⏰ Sau 10 ngày nếu khách chưa đổi SIM và không vào được Zalo, shop xin phép không chịu trách nhiệm."
+                ),
+                "require_hint": "Ghi chú: số lượng, nhu cầu sử dụng: ",
+            },
+        ],
+        "img_key": "CAT_ZALO",
+    },
+    {
+        "cat_id": "TIKTOK",
+        "title": "🎵 TIKTOK",
+        "desc": "🎵 **TIKTOK – Danh mục sản phẩm**\n👉 Chọn mục bên dưới 👇",
+        "items": [
+            {
+                "item_id": "TIKTOK_WHITE",
+                "group": "TIKTOK",
+                "name": "Tiktok trắng xây kênh ",
+                "price": "40.000đ",
+                "detail": "🎵 **Tiktok trắng để xây kênh**\n💰 Giá: **40.000đ**\n📌 Quốc gia: **Việt - US - UK**\n📌 Phù hợp xây kênh mới",
+                "require_hint": "Yêu cầu: quốc gia | SL",
+            },
+            {
+                "item_id": "TIKTOK_BUILD",
+                "group": "TIKTOK",
+                "name": "Tiktok xây kênh 1-2K follow ",
+                "price": "200.000đ",
+                "detail": "🎵 **Tiktok xây kênh 1K - 2K follow**\n💰 Giá: **200.000đ**\n📌 Quốc gia: **Việt - US - UK**",
+                "require_hint": "Yêu cầu: quốc gia | SL",
+            },
+            {
+                "item_id": "TIKTOK_LIVE",
+                "group": "TIKTOK",
+                "name": "Tiktok LIVE (Việt - US - UK)",
+                "price": "250.000đ",
+                "detail": "🎵 **Tài khoản Tiktok LIVE**\n💰 Giá: **250.000đ**\n📌 Quốc gia: **Việt - US - UK**\n📌 Bao log, bao back, bao hạn chế 5p, bao ngắt.",
+                "require_hint": "Yêu cầu: quốc gia | SL",
+            },
+        ],
+        "img_key": "CAT_TIKTOK",
+    },
+    {
         "cat_id": "WEB",
         "title": "🖥️ LÀM WEB",
-        "desc": "🖥️ **LÀM WEBSITE THEO YÊU CẦU **\n💬 ** WEB vòng quay may mắn : mẫu https://u888-vongquaymayman.online/\n💬 **Giá:** thương lượng theo nhu cầu\n👉 Chọn mục bên dưới 👇",
+        "desc": "🖥️ **LÀM WEBSITE THEO YÊU CẦU **\n💬 ** WEB vòng quay may mắn : mẫu https://u888-vongquaymayman.online/, http://gg88k.xyz/\n💬 **Giá:** thương lượng theo nhu cầu\n👉 Chọn mục bên dưới 👇",
         "items": [
             {
                 "item_id": "WEB_QUOTE",
@@ -361,31 +419,6 @@ CATALOG = [
             },
         ],
         "img_key": "CAT_WEB",
-    },
-    {
-        "cat_id": "DOMAIN",
-        "title": "🌐 TÊN MIỀN",
-        "desc": (
-            "🌐 **Giá – 370K / 1 domain .CLICK  .PRO	.LIVE	.LOVE	.VIP    .ONLINE    .SHOP	.ORG	.STORE	.TECH	.XYZ	.FUN	**\n"
-            "✅ Bảo hành suốt thời gian sử dụng\n"
-            "✅ Đổi hậu đài ~ 3 phút\n"
-            "👉 Chọn mục bên dưới 👇"
-        ),
-        "items": [
-            {
-                "item_id": "DOMAIN_370",
-                "group": "TÊN MIỀN",
-                "name": "Tên miền đồng giá: .CLICK  .PRO	.LIVE	.LOVE	.VIP    .ONLINE    .SHOP	.ORG	.STORE	.TECH	.XYZ	.FUN",
-                "price": "370.000đ",
-                "detail": (
-                    "✅ Bảo hành suốt thời gian sử dụng\n"
-                    "✅ Đổi hậu đài ~ 3 phút\n\n"
-                    "📌 Khi mua, ghi rõ **đuôi** (...) và **keyword**."
-                ),
-                "require_hint": "Ghi chú keyword/đuôi : ...",
-            },
-        ],
-        "img_key": "CAT_DOMAIN",
     },
     {
         "cat_id": "MB",
@@ -421,15 +454,29 @@ CATALOG = [
     },
     {
         "cat_id": "BOT",
-        "title": "🤖🧠BOT SPAM NHẬN KM NẠP ĐẦU ",
-        "desc": "🤖🧠 **👉 Ví dụ giống bot : @Nhan_code_free_bot**\n💰 400K / 1 ",
+        "title": "🤖🧠 BOT SPAM NHẬN KM NẠP ĐẦU",
+        "desc": (
+            "🤖🧠 **BOT SPAM NHẬN KM NẠP ĐẦU**\n\n"
+            "👉 Ví dụ giống bot: `@GG88codefree_bot`\n"
+            "💰 **Giá:** 500.000đ / 1 bot\n"
+            "👉 Chọn mục bên dưới 👇"
+        ),
         "items": [
             {
                 "item_id": "bot_spam",
-                "group": "bot_spam",
+                "group": "BOT SPAM",
                 "name": "Bot Spam Nạp Đầu",
-                "price": "400.000đ",
-                "detail": "🤖🧠 **\n👉 Khi khách hàng nhấn vào bot thì bot sẽ chạy kịch bản hướng dẫn khách hàng đăng ký đúng link và gửi bill chuyển khoản vào bot\n Bot sẽ chuyển tiếp tên tài khoản game , thời gian đăng ký và bill chuyển khoản của khách hàng \n Về 1 tele admin của bạn để bạn treo bill 👇 📌 ** ",
+                "price": "500.000đ",
+                "detail": (
+                    "🤖🧠 **BOT SPAM NẠP ĐẦU**\n\n"
+                    "👉 Khi khách hàng nhấn vào bot, bot sẽ chạy kịch bản hướng dẫn khách đăng ký đúng link.\n\n"
+                    "📌 Khách gửi bill chuyển khoản vào bot.\n"
+                    "📌 Bot sẽ chuyển tiếp thông tin về Telegram admin của bạn, gồm:\n"
+                    "- Tên tài khoản game\n"
+                    "- Thời gian đăng ký\n"
+                    "- Bill chuyển khoản của khách hàng\n\n"
+                    "✅ Phù hợp để admin treo bill và xử lý đơn nhanh hơn."
+                ),
                 "require_hint": "Yêu cầu: SL",
             },
         ],
@@ -449,14 +496,18 @@ for c in CATALOG:
 def kb_main():
     kb = types.InlineKeyboardMarkup(row_width=2)
     kb.add(
+        types.InlineKeyboardButton("🌐 TÊN MIỀN", callback_data="CAT|DOMAIN"),
+    )
+    kb.add(
         types.InlineKeyboardButton("📱 TELE", callback_data="CAT|TELE"),
-        types.InlineKeyboardButton("🎵 TIKTOK", callback_data="CAT|TIKTOK"),
         types.InlineKeyboardButton("📘 FACEBOOK", callback_data="CAT|FB"),
+        types.InlineKeyboardButton("💬 ZALO", callback_data="CAT|ZALO"),
+        types.InlineKeyboardButton("🎵 TIKTOK", callback_data="CAT|TIKTOK"),
         types.InlineKeyboardButton("🖥️ LÀM WEB", callback_data="CAT|WEB"),
         types.InlineKeyboardButton("🤖🧠 BOT SPAM CHO SALE", callback_data="CAT|BOT"),
         types.InlineKeyboardButton("📲 OTP SĐT", callback_data="CAT|OTP"),
         types.InlineKeyboardButton("🏦 STK MB BANK", callback_data="CAT|MB"),        
-        types.InlineKeyboardButton("🌐 TÊN MIỀN", callback_data="CAT|DOMAIN"),
+        
     )
     kb.add(
         types.InlineKeyboardButton("💳 Thanh toán", callback_data="PAY"),
@@ -587,7 +638,7 @@ def cmd_setimg(message):
 
     key = parts[1].strip().upper()
     admin_waiting_img_key[message.chat.id] = key
-    bot.reply_to(message, f"📷 OK. Giờ hãy gửi **ảnh** để gắn vào KEY: **{key}**.", parse_mode="Markdown")
+    bot.reply_to(message, f"📷 OK. Giờ hãy gửi ảnh để gắn vào KEY: {key}.")
 
 
 @bot.message_handler(content_types=["photo"])
@@ -600,7 +651,7 @@ def on_photo(message):
     if key and is_admin(message.from_user):
         set_image(key, file_id)
         admin_waiting_img_key.pop(message.chat.id, None)
-        bot.reply_to(message, f"✅ Đã gắn ảnh cho **{key}**.", parse_mode="Markdown")
+        bot.reply_to(message, f"✅ Đã gắn ảnh cho {key}.")
 
 
 # =========================

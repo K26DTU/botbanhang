@@ -1273,7 +1273,7 @@ def setup_payos_webhook():
 
         webhook_url = f"{PUBLIC_BASE_URL.rstrip('/')}/payment/webhook"
 
-        result = payos.webhooks.confirm(webhook_url)
+        result = payos_client.webhooks.confirm(webhook_url)
 
         return {
             "success": True,

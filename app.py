@@ -1,12 +1,20 @@
+import base64
+import io
+import json
 import os
-import sqlite3
+import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
 import telebot
 from telebot import types
-from flask import Flask, request
+from flask import Flask, jsonify, request
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from payos import PayOS
+from payos.types import CreatePaymentLinkRequest
+import qrcode
 
 # =========================
 # ENV CONFIG
@@ -21,65 +29,510 @@ BANK_NAME = os.getenv("BANK_NAME", "VCB").strip()
 ACCOUNT_NAME = os.getenv("ACCOUNT_NAME", "PHAM DINH MINH VU").strip()
 ACCOUNT_NO = os.getenv("ACCOUNT_NO", "0812810305").strip()
 
-DB_PATH = os.getenv("DB_PATH", "data.db")
+# Google Sheets is the persistent source of truth for stock and orders.
+GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID", "").strip()
+GOOGLE_SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
+GOOGLE_SERVICE_ACCOUNT_JSON_B64 = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON_B64", "").strip()
+
+PAYOS_CLIENT_ID = os.getenv("PAYOS_CLIENT_ID", "").strip()
+PAYOS_API_KEY = os.getenv("PAYOS_API_KEY", "").strip()
+PAYOS_CHECKSUM_KEY = os.getenv("PAYOS_CHECKSUM_KEY", "").strip()
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
+PAYMENT_EXPIRE_MINUTES = int(os.getenv("PAYMENT_EXPIRE_MINUTES", "15"))
+
+SHEET_INVENTORY = os.getenv("SHEET_INVENTORY", "INVENTORY").strip()
+SHEET_ORDERS = os.getenv("SHEET_ORDERS", "ORDERS").strip()
+SHEET_VISITORS = os.getenv("SHEET_VISITORS", "VISITORS").strip()
+SHEET_IMAGES = os.getenv("SHEET_IMAGES", "IMAGES").strip()
+
+INVENTORY_HEADERS = [
+    "item_id", "resource", "status", "order_code", "buyer_username",
+    "buyer_id", "sold_at", "reserved_until", "note",
+]
+ORDERS_HEADERS = [
+    "order_code", "item_id", "product_name", "amount", "status", "chat_id",
+    "user_id", "username", "inventory_row", "checkout_url", "payment_link_id",
+    "created_at", "expires_at", "paid_at", "delivered_at", "reference", "error",
+]
+VISITORS_HEADERS = [
+    "user_id", "username", "full_name", "first_seen", "last_seen",
+    "start_count", "source",
+]
+IMAGES_HEADERS = ["key", "file_id", "updated_at"]
 
 if not BOT_TOKEN:
     raise RuntimeError("Missing BOT_TOKEN env var")
 
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 server = Flask(__name__)
+state_lock = threading.RLock()
 
-# =========================
-# DB (SQLite) - store image file_id by key
-# =========================
-def db_connect():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-def init_db():
-    conn = db_connect()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS images (
-            key TEXT PRIMARY KEY,
-            file_id TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        )
-        """
+payos_client = None
+if PAYOS_CLIENT_ID and PAYOS_API_KEY and PAYOS_CHECKSUM_KEY:
+    payos_client = PayOS(
+        client_id=PAYOS_CLIENT_ID,
+        api_key=PAYOS_API_KEY,
+        checksum_key=PAYOS_CHECKSUM_KEY,
     )
-    conn.commit()
-    conn.close()
+
+# =========================
+# Google Sheets storage
+# =========================
+def now_vn() -> datetime:
+    return datetime.now(timezone(timedelta(hours=7)))
+
+
+def iso_now() -> str:
+    return now_vn().isoformat(timespec="seconds")
+
+
+def _service_account_info() -> dict:
+    raw = GOOGLE_SERVICE_ACCOUNT_JSON
+    if not raw and GOOGLE_SERVICE_ACCOUNT_JSON_B64:
+        raw = base64.b64decode(GOOGLE_SERVICE_ACCOUNT_JSON_B64).decode("utf-8")
+    if not raw:
+        raise RuntimeError("Missing GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_SERVICE_ACCOUNT_JSON_B64")
+    return json.loads(raw)
+
+
+def sheets_service():
+    if not GOOGLE_SHEET_ID:
+        raise RuntimeError("Missing GOOGLE_SHEET_ID")
+    creds = service_account.Credentials.from_service_account_info(
+        _service_account_info(),
+        scopes=["https://www.googleapis.com/auth/spreadsheets"],
+    )
+    return build("sheets", "v4", credentials=creds, cache_discovery=False)
+
+
+def ensure_google_sheets():
+    if not GOOGLE_SHEET_ID or not (GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_SERVICE_ACCOUNT_JSON_B64):
+        return
+    service = sheets_service()
+    meta = service.spreadsheets().get(spreadsheetId=GOOGLE_SHEET_ID).execute()
+    existing = {s["properties"]["title"] for s in meta.get("sheets", [])}
+    requests_body = []
+    for title in (SHEET_INVENTORY, SHEET_ORDERS, SHEET_VISITORS, SHEET_IMAGES):
+        if title not in existing:
+            requests_body.append({"addSheet": {"properties": {"title": title}}})
+    if requests_body:
+        service.spreadsheets().batchUpdate(
+            spreadsheetId=GOOGLE_SHEET_ID,
+            body={"requests": requests_body},
+        ).execute()
+
+    for title, headers in (
+        (SHEET_INVENTORY, INVENTORY_HEADERS),
+        (SHEET_ORDERS, ORDERS_HEADERS),
+        (SHEET_VISITORS, VISITORS_HEADERS),
+        (SHEET_IMAGES, IMAGES_HEADERS),
+    ):
+        values = service.spreadsheets().values().get(
+            spreadsheetId=GOOGLE_SHEET_ID,
+            range=f"'{title}'!1:1",
+        ).execute().get("values", [])
+        if not values or values[0] != headers:
+            service.spreadsheets().values().update(
+                spreadsheetId=GOOGLE_SHEET_ID,
+                range=f"'{title}'!A1",
+                valueInputOption="RAW",
+                body={"values": [headers]},
+            ).execute()
+
+
+def sheet_rows(title: str, headers: list[str]) -> list[tuple[int, dict]]:
+    values = sheets_service().spreadsheets().values().get(
+        spreadsheetId=GOOGLE_SHEET_ID,
+        range=f"'{title}'!A2:ZZ",
+    ).execute().get("values", [])
+    result = []
+    for row_number, row in enumerate(values, start=2):
+        padded = list(row) + [""] * max(0, len(headers) - len(row))
+        result.append((row_number, dict(zip(headers, padded[:len(headers)]))))
+    return result
+
+
+def append_sheet_row(title: str, headers: list[str], data: dict):
+    row = [str(data.get(h, "")) for h in headers]
+    sheets_service().spreadsheets().values().append(
+        spreadsheetId=GOOGLE_SHEET_ID,
+        range=f"'{title}'!A:ZZ",
+        valueInputOption="RAW",
+        insertDataOption="INSERT_ROWS",
+        body={"values": [row]},
+    ).execute()
+
+
+def update_sheet_row(title: str, headers: list[str], row_number: int, changes: dict):
+    current = [""] * len(headers)
+    values = sheets_service().spreadsheets().values().get(
+        spreadsheetId=GOOGLE_SHEET_ID,
+        range=f"'{title}'!A{row_number}:ZZ{row_number}",
+    ).execute().get("values", [])
+    if values:
+        for i, value in enumerate(values[0][:len(headers)]):
+            current[i] = value
+    indexes = {h: i for i, h in enumerate(headers)}
+    for key, value in changes.items():
+        if key in indexes:
+            current[indexes[key]] = str(value)
+    sheets_service().spreadsheets().values().update(
+        spreadsheetId=GOOGLE_SHEET_ID,
+        range=f"'{title}'!A{row_number}",
+        valueInputOption="RAW",
+        body={"values": [current]},
+    ).execute()
 
 
 def set_image(key: str, file_id: str):
-    conn = db_connect()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        INSERT INTO images(key, file_id, updated_at)
-        VALUES(?,?,?)
-        ON CONFLICT(key) DO UPDATE SET file_id=excluded.file_id, updated_at=excluded.updated_at
-        """,
-        (key.upper(), file_id, datetime.utcnow().isoformat()),
-    )
-    conn.commit()
-    conn.close()
+    key = key.upper().strip()
+    with state_lock:
+        for row_number, row in sheet_rows(SHEET_IMAGES, IMAGES_HEADERS):
+            if row.get("key", "").upper() == key:
+                update_sheet_row(SHEET_IMAGES, IMAGES_HEADERS, row_number, {
+                    "file_id": file_id, "updated_at": iso_now(),
+                })
+                return
+        append_sheet_row(SHEET_IMAGES, IMAGES_HEADERS, {
+            "key": key, "file_id": file_id, "updated_at": iso_now(),
+        })
 
 
 def get_image(key: str):
-    conn = db_connect()
-    cur = conn.cursor()
-    cur.execute("SELECT file_id FROM images WHERE key=? LIMIT 1", (key.upper(),))
-    row = cur.fetchone()
-    conn.close()
-    return row["file_id"] if row else None
+    if not GOOGLE_SHEET_ID:
+        return None
+    try:
+        key = key.upper().strip()
+        for _, row in sheet_rows(SHEET_IMAGES, IMAGES_HEADERS):
+            if row.get("key", "").upper() == key:
+                return row.get("file_id", "").strip() or None
+    except Exception as exc:
+        print(f"[GET_IMAGE] error: {exc}")
+    return None
 
 
-# Init DB at import time (works with gunicorn)
-init_db()
+def parse_price_vnd(price: str):
+    digits = "".join(ch for ch in price if ch.isdigit())
+    return int(digits) if digits else None
+
+
+def release_expired_reservations():
+    now = now_vn()
+    for row_number, row in sheet_rows(SHEET_INVENTORY, INVENTORY_HEADERS):
+        if row.get("status", "").upper() != "RESERVED":
+            continue
+        try:
+            expired = datetime.fromisoformat(row.get("reserved_until", "")) <= now
+        except Exception:
+            expired = True
+        if expired:
+            update_sheet_row(SHEET_INVENTORY, INVENTORY_HEADERS, row_number, {
+                "status": "AVAILABLE", "order_code": "", "buyer_username": "",
+                "buyer_id": "", "reserved_until": "",
+            })
+
+
+def reserve_resource(item_id: str, order_code: int, user) -> tuple[int, str] | None:
+    release_expired_reservations()
+    expires_at = now_vn() + timedelta(minutes=PAYMENT_EXPIRE_MINUTES)
+    for row_number, row in sheet_rows(SHEET_INVENTORY, INVENTORY_HEADERS):
+        if row.get("item_id", "").strip().upper() != item_id.upper():
+            continue
+        if row.get("status", "").strip().upper() not in ("", "AVAILABLE"):
+            continue
+        resource = row.get("resource", "").strip()
+        if not resource:
+            continue
+        update_sheet_row(SHEET_INVENTORY, INVENTORY_HEADERS, row_number, {
+            "status": "RESERVED",
+            "order_code": order_code,
+            "buyer_username": user_tag(user),
+            "buyer_id": user.id,
+            "reserved_until": expires_at.isoformat(timespec="seconds"),
+        })
+        return row_number, resource
+    return None
+
+
+def find_order(order_code: int):
+    for row_number, row in sheet_rows(SHEET_ORDERS, ORDERS_HEADERS):
+        if str(row.get("order_code", "")) == str(order_code):
+            return row_number, row
+    return None
+
+
+def next_order_code() -> int:
+    candidate = int(time.time())
+    while find_order(candidate):
+        candidate += 1
+    return candidate
+
+
+def record_start_visit(message):
+    source = ""
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) > 1:
+        source = parts[1][:100]
+    uid = str(message.from_user.id)
+    now = iso_now()
+    rows = sheet_rows(SHEET_VISITORS, VISITORS_HEADERS)
+    for row_number, row in rows:
+        if str(row.get("user_id", "")) == uid:
+            try:
+                count = int(row.get("start_count", "0") or 0) + 1
+            except ValueError:
+                count = 1
+            update_sheet_row(SHEET_VISITORS, VISITORS_HEADERS, row_number, {
+                "username": user_tag(message.from_user),
+                "full_name": " ".join(filter(None, [message.from_user.first_name, message.from_user.last_name])),
+                "last_seen": now,
+                "start_count": count,
+                "source": source or row.get("source", ""),
+            })
+            return False, count, source
+    append_sheet_row(SHEET_VISITORS, VISITORS_HEADERS, {
+        "user_id": uid,
+        "username": user_tag(message.from_user),
+        "full_name": " ".join(filter(None, [message.from_user.first_name, message.from_user.last_name])),
+        "first_seen": now,
+        "last_seen": now,
+        "start_count": 1,
+        "source": source,
+    })
+    return True, 1, source
+
+
+def notify_admin_start(message):
+    if not ADMIN_CHAT_ID or is_admin(message.from_user):
+        return
+    try:
+        is_new, count, source = record_start_visit(message)
+        title = "🆕 KHÁCH MỚI VỪA VÀO BOT" if is_new else "🔔 KHÁCH VỪA NHẤN /start"
+        full_name = " ".join(filter(None, [message.from_user.first_name, message.from_user.last_name])) or "Không có"
+        text = (
+            f"{title}\n\n"
+            f"👤 Tên: {full_name}\n"
+            f"🔗 Username: {user_tag(message.from_user)}\n"
+            f"🆔 Telegram ID: {message.from_user.id}\n"
+            f"🔁 Số lần /start: {count}\n"
+            f"📣 Nguồn: {source or 'trực tiếp'}\n"
+            f"🕐 Thời gian: {now_vn().strftime('%d/%m/%Y %H:%M:%S')}"
+        )
+        bot.send_message(ADMIN_CHAT_ID, text)
+    except Exception as exc:
+        print(f"[START_NOTIFY] error: {exc}")
+
+
+def manual_resource_markup(item_id: str):
+    kb = types.InlineKeyboardMarkup(row_width=1)
+    found = ITEM_BY_ID.get(item_id)
+    if found:
+        _, it = found
+        msg = f"MUA | {it['group']} | {it['name']} | User cần admin hỗ trợ"
+        kb.add(types.InlineKeyboardButton("📩 NHẮN TELEGRAM ADMIN", url=build_prefilled_admin_link(msg)))
+    else:
+        kb.add(types.InlineKeyboardButton("📩 NHẮN TELEGRAM ADMIN", url=admin_url()))
+    kb.add(types.InlineKeyboardButton("⏪ Quay lại danh mục", callback_data=f"BACKCAT|{item_id}"))
+    return kb
+
+
+def payment_markup(checkout_url: str, item_id: str):
+    kb = types.InlineKeyboardMarkup(row_width=1)
+    kb.add(types.InlineKeyboardButton("💳 MỞ TRANG THANH TOÁN", url=checkout_url))
+    kb.add(types.InlineKeyboardButton("📩 Liên hệ Admin", url=admin_url()))
+    kb.add(types.InlineKeyboardButton("⏪ Quay lại danh mục", callback_data=f"BACKCAT|{item_id}"))
+    return kb
+
+
+def create_payment_for_item(call, item_id: str):
+    if not payos_client:
+        raise RuntimeError("Chưa cấu hình PAYOS_CLIENT_ID / PAYOS_API_KEY / PAYOS_CHECKSUM_KEY")
+    if not PUBLIC_BASE_URL:
+        raise RuntimeError("Chưa cấu hình PUBLIC_BASE_URL")
+    if not GOOGLE_SHEET_ID:
+        raise RuntimeError("Chưa cấu hình GOOGLE_SHEET_ID")
+
+    found = ITEM_BY_ID.get(item_id)
+    if not found:
+        bot.send_message(call.message.chat.id, "❌ Sản phẩm không tồn tại.")
+        return
+    _, item = found
+    amount = parse_price_vnd(item.get("price", ""))
+    if not amount:
+        bot.send_message(
+            call.message.chat.id,
+            "⚠️ Tài nguyên này không được up sẵn trên bot, nhắn tele admin để nhận tài nguyên.",
+            reply_markup=manual_resource_markup(item_id),
+        )
+        return
+
+    with state_lock:
+        order_code = next_order_code()
+        reserved = reserve_resource(item_id, order_code, call.from_user)
+        if not reserved:
+            bot.send_message(
+                call.message.chat.id,
+                "⚠️ Tài nguyên này không được up sẵn trên bot, nhắn tele admin để nhận tài nguyên.",
+                reply_markup=manual_resource_markup(item_id),
+            )
+            return
+        inventory_row, _resource = reserved
+        created_at = now_vn()
+        expires_at = created_at + timedelta(minutes=PAYMENT_EXPIRE_MINUTES)
+        append_sheet_row(SHEET_ORDERS, ORDERS_HEADERS, {
+            "order_code": order_code,
+            "item_id": item_id,
+            "product_name": item["name"],
+            "amount": amount,
+            "status": "CREATING",
+            "chat_id": call.message.chat.id,
+            "user_id": call.from_user.id,
+            "username": user_tag(call.from_user),
+            "inventory_row": inventory_row,
+            "created_at": created_at.isoformat(timespec="seconds"),
+            "expires_at": expires_at.isoformat(timespec="seconds"),
+        })
+        order_row, _ = find_order(order_code)
+
+        try:
+            payment_request = CreatePaymentLinkRequest(
+                order_code=order_code,
+                amount=amount,
+                description=f"VS{order_code}",
+                cancel_url=f"{PUBLIC_BASE_URL}/payment/cancel",
+                return_url=f"{PUBLIC_BASE_URL}/payment/success",
+                expired_at=int(expires_at.timestamp()),
+            )
+            payment_link = payos_client.payment_requests.create(payment_request)
+            checkout_url = payment_link.checkout_url
+            payment_link_id = payment_link.payment_link_id
+            qr_text = payment_link.qr_code
+            update_sheet_row(SHEET_ORDERS, ORDERS_HEADERS, order_row, {
+                "status": "PENDING",
+                "checkout_url": checkout_url,
+                "payment_link_id": payment_link_id,
+            })
+        except Exception as exc:
+            update_sheet_row(SHEET_INVENTORY, INVENTORY_HEADERS, inventory_row, {
+                "status": "AVAILABLE", "order_code": "", "buyer_username": "",
+                "buyer_id": "", "reserved_until": "",
+            })
+            update_sheet_row(SHEET_ORDERS, ORDERS_HEADERS, order_row, {
+                "status": "FAILED", "error": str(exc)[:500],
+            })
+            raise
+
+    qr_image = qrcode.make(qr_text)
+    buffer = io.BytesIO()
+    buffer.name = f"QR_{order_code}.png"
+    qr_image.save(buffer, format="PNG")
+    buffer.seek(0)
+    caption = (
+        f"🧾 **ĐƠN HÀNG #{order_code}**\n\n"
+        f"📦 **Sản phẩm:** {item['name']}\n"
+        f"💰 **Thanh toán:** {amount:,}đ\n"
+        f"⏳ **Thời hạn:** {PAYMENT_EXPIRE_MINUTES} phút\n\n"
+        "Quét QR để thanh toán. Khi ngân hàng xác nhận, bot sẽ tự động giao tài khoản/mật khẩu."
+    ).replace(",", ".")
+    bot.send_photo(
+        call.message.chat.id,
+        buffer,
+        caption=caption,
+        parse_mode="Markdown",
+        reply_markup=payment_markup(checkout_url, item_id),
+    )
+
+
+def deliver_paid_order(order_code: int, amount: int, reference: str):
+    with state_lock:
+        found = find_order(order_code)
+        if not found:
+            raise RuntimeError(f"Order {order_code} not found")
+        order_row, order = found
+        if order.get("status") == "DELIVERED":
+            return
+        expected_amount = int(order.get("amount", "0") or 0)
+        if expected_amount != int(amount):
+            update_sheet_row(SHEET_ORDERS, ORDERS_HEADERS, order_row, {
+                "status": "AMOUNT_MISMATCH",
+                "reference": reference,
+                "error": f"Expected {expected_amount}, received {amount}",
+            })
+            raise RuntimeError("Payment amount mismatch")
+        inventory_row = int(order.get("inventory_row", "0") or 0)
+        inventory_values = sheets_service().spreadsheets().values().get(
+            spreadsheetId=GOOGLE_SHEET_ID,
+            range=f"'{SHEET_INVENTORY}'!A{inventory_row}:I{inventory_row}",
+        ).execute().get("values", [])
+        if not inventory_values:
+            raise RuntimeError("Reserved inventory row not found")
+        row = inventory_values[0] + [""] * (len(INVENTORY_HEADERS) - len(inventory_values[0]))
+        inventory = dict(zip(INVENTORY_HEADERS, row[:len(INVENTORY_HEADERS)]))
+        if str(inventory.get("order_code", "")) != str(order_code):
+            raise RuntimeError("Inventory reservation does not match order")
+        resource = inventory.get("resource", "").strip()
+        if not resource:
+            raise RuntimeError("Inventory resource is empty")
+
+        paid_at = iso_now()
+        update_sheet_row(SHEET_ORDERS, ORDERS_HEADERS, order_row, {
+            "status": "PAID", "paid_at": paid_at, "reference": reference,
+        })
+        update_sheet_row(SHEET_INVENTORY, INVENTORY_HEADERS, inventory_row, {
+            "status": "SOLD",
+            "sold_at": paid_at,
+            "reserved_until": "",
+        })
+
+    customer_text = (
+        "✅ **THANH TOÁN THÀNH CÔNG**\n\n"
+        f"🧾 **Mã đơn:** {order_code}\n"
+        f"📦 **Sản phẩm:** {order.get('product_name', '')}\n\n"
+        "🔐 **TÀI NGUYÊN**\n"
+        f"`{resource}`\n\n"
+        "⚠️ Vui lòng lưu lại thông tin và đổi mật khẩu sau khi đăng nhập."
+    )
+    try:
+        bot.send_message(int(order["chat_id"]), customer_text, parse_mode="Markdown")
+        delivered_at = iso_now()
+        update_sheet_row(SHEET_ORDERS, ORDERS_HEADERS, order_row, {
+            "status": "DELIVERED", "delivered_at": delivered_at,
+        })
+        remaining = sum(
+            1 for _, r in sheet_rows(SHEET_INVENTORY, INVENTORY_HEADERS)
+            if r.get("item_id", "").upper() == order.get("item_id", "").upper()
+            and r.get("status", "").upper() in ("", "AVAILABLE")
+            and r.get("resource", "").strip()
+        )
+        admin_text = (
+            "✅ BOT ĐÃ GIAO TÀI NGUYÊN\n\n"
+            f"🧾 Mã đơn: {order_code}\n"
+            f"👤 Khách: {order.get('username', '')}\n"
+            f"🆔 Telegram ID: {order.get('user_id', '')}\n"
+            f"📦 Sản phẩm: {order.get('product_name', '')}\n"
+            f"🔐 Tài nguyên: {resource}\n"
+            f"💰 Thanh toán: {amount:,}đ\n"
+            f"📊 Kho còn lại: {remaining}"
+        ).replace(",", ".")
+        if ADMIN_CHAT_ID:
+            bot.send_message(ADMIN_CHAT_ID, admin_text)
+    except Exception as exc:
+        update_sheet_row(SHEET_ORDERS, ORDERS_HEADERS, order_row, {
+            "status": "DELIVERY_FAILED", "error": str(exc)[:500],
+        })
+        if ADMIN_CHAT_ID:
+            bot.send_message(
+                ADMIN_CHAT_ID,
+                f"⚠️ GIAO HÀNG THẤT BẠI\nMã đơn: {order_code}\nKhách: {order.get('username', '')}\nLỗi: {exc}",
+            )
+        raise
+
+
+# Initialize sheet structure when configuration is available.
+try:
+    ensure_google_sheets()
+except Exception as exc:
+    print(f"[GOOGLE_SHEETS_INIT] error: {exc}")
 
 # =========================
 # Helpers
@@ -540,9 +993,9 @@ def kb_category(cat_id: str):
     return kb
 
 
-def kb_item(item_id: str, buy_url: str):
+def kb_item(item_id: str, buy_url: str = ""):
     kb = types.InlineKeyboardMarkup(row_width=1)
-    kb.add(types.InlineKeyboardButton("✅ MUA NGAY (soạn sẵn)", url=buy_url))
+    kb.add(types.InlineKeyboardButton("✅ MUA NGAY", callback_data=f"BUY|{item_id}"))
     kb.add(types.InlineKeyboardButton("💳 Thanh toán", callback_data="PAY"))
     kb.add(types.InlineKeyboardButton("📩 Nhắn Admin", url=admin_url()))
     kb.add(types.InlineKeyboardButton("⏪ Quay lại danh mục", callback_data=f"BACKCAT|{item_id}"))
@@ -604,6 +1057,7 @@ def build_buy_text(from_user, group: str, product: str, price: str, require_hint
 # =========================
 @bot.message_handler(commands=["start"])
 def cmd_start(message):
+    notify_admin_start(message)
     send_with_optional_photo(message.chat.id, "START", text_start(), reply_markup=kb_main())
 
 
@@ -706,17 +1160,13 @@ def on_callback(call):
 
             text = item_message(item_id)
 
-            buy_text = build_buy_text(
-                call.from_user,
-                group=it["group"],
-                product=it["name"],
-                price=it["price"],
-                require_hint=it.get("require_hint", "..."),
-            )
-            buy_url = build_prefilled_admin_link(buy_text)
-
             img_key = f"ITEM_{item_id}"
-            send_with_optional_photo(chat_id, img_key, text, reply_markup=kb_item(item_id, buy_url))
+            send_with_optional_photo(chat_id, img_key, text, reply_markup=kb_item(item_id))
+            return
+
+        if data.startswith("BUY|"):
+            item_id = data.split("|", 1)[1]
+            create_payment_for_item(call, item_id)
             return
 
         if data.startswith("BACKCAT|"):
@@ -763,6 +1213,36 @@ def log_ping():
         )
 
 
+@server.get("/payment/success")
+def payment_success():
+    return "Thanh toán đã được ghi nhận. Bạn có thể quay lại Telegram để nhận tài nguyên.", 200
+
+
+@server.get("/payment/cancel")
+def payment_cancel():
+    return "Đơn thanh toán đã bị huỷ. Bạn có thể quay lại Telegram.", 200
+
+
+@server.post("/payment/webhook")
+def payment_webhook():
+    if not payos_client:
+        return jsonify({"message": "payOS not configured"}), 503
+    try:
+        webhook_data = payos_client.webhooks.verify(request.get_data())
+        order_code = int(webhook_data.order_code)
+        amount = int(webhook_data.amount)
+        reference = str(webhook_data.reference or "")
+        if not find_order(order_code):
+            # payOS sends a signed sample transaction while confirming webhook URL.
+            print(f"[PAYMENT_WEBHOOK] verified unknown/sample order: {order_code}")
+            return jsonify({"message": "Webhook verified"}), 200
+        deliver_paid_order(order_code, amount, reference)
+        return jsonify({"message": "OK"}), 200
+    except Exception as exc:
+        print(f"[PAYMENT_WEBHOOK] error: {exc}")
+        return jsonify({"message": "Invalid or failed webhook"}), 400
+
+
 # ✅ Telegram webhook endpoint
 @server.post("/webhook")
 def telegram_webhook():
@@ -775,3 +1255,36 @@ def telegram_webhook():
         print(f"[WEBHOOK] error: {e}")
         # vẫn trả 200 để Telegram không retry spam
         return "OK", 200
+
+@server.get("/setup-payos-webhook")
+def setup_payos_webhook():
+    try:
+        if not PUBLIC_BASE_URL:
+            return {
+                "success": False,
+                "error": "Thiếu biến môi trường PUBLIC_BASE_URL",
+            }, 500
+
+        if not PAYOS_CLIENT_ID or not PAYOS_API_KEY or not PAYOS_CHECKSUM_KEY:
+            return {
+                "success": False,
+                "error": "Thiếu cấu hình PAYOS_CLIENT_ID, PAYOS_API_KEY hoặc PAYOS_CHECKSUM_KEY",
+            }, 500
+
+        webhook_url = f"{PUBLIC_BASE_URL.rstrip('/')}/payment/webhook"
+
+        result = payos.webhooks.confirm(webhook_url)
+
+        return {
+            "success": True,
+            "message": "Đã đăng ký webhook payOS",
+            "webhook_url": webhook_url,
+            "result": str(result),
+        }, 200
+
+    except Exception as exc:
+        print(f"[SETUP PAYOS WEBHOOK] error: {exc}")
+        return {
+            "success": False,
+            "error": str(exc),
+        }, 500

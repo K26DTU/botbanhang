@@ -1,0 +1,20 @@
+BOT_TOKEN=telegram_bot_token
+ADMIN_USERNAME=@telegram_admin_username
+ADMIN_CHAT_ID=telegram_admin_numeric_id
+SHOP_NAME=VUSMILE
+
+GOOGLE_SHEET_ID=spreadsheet_id_from_google_sheet_url
+# Chọn MỘT trong hai biến bên dưới. Khuyên dùng bản Base64 để dán lên Render dễ hơn.
+GOOGLE_SERVICE_ACCOUNT_JSON_B64=base64_of_service_account_json
+# GOOGLE_SERVICE_ACCOUNT_JSON={"type":"service_account",...}
+
+PAYOS_CLIENT_ID=client_id_from_payos
+PAYOS_API_KEY=api_key_from_payos
+PAYOS_CHECKSUM_KEY=checksum_key_from_payos
+PUBLIC_BASE_URL=https://your-render-service.onrender.com
+PAYMENT_EXPIRE_MINUTES=15
+
+SHEET_INVENTORY=INVENTORY
+SHEET_ORDERS=ORDERS
+SHEET_VISITORS=VISITORS
+SHEET_IMAGES=IMAGES

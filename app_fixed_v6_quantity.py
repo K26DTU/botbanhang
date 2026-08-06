@@ -1296,7 +1296,7 @@ CATALOG = [
                 "group": "TIKTOK",
                 "name": "Tiktok LIVE CHAY STUDIO (Việt Cổ)",
                 "price": "150.000đ",
-                "detail": "🎵 **Tài khoản Tiktok LIVE**\n💰 Giá: **250.000đ**\n📌 Quốc gia: **Việt - US - UK**\n📌 Bao log, bao back, live chay tốt vì hàng việt cổ, online lại dễ lên đề xuất, chỉ Live Studio, buff đô sẽ bị ngắt.",
+                "detail": "🎵 **Tài khoản Tiktok LIVE**\n💰 Giá: **150.000đ**\n📌 Quốc gia: **Việt - US - UK**\n📌 Bao log, bao back, live chay tốt vì hàng việt cổ, online lại dễ lên đề xuất, chỉ Live Studio, buff đô sẽ bị ngắt.",
                 "require_hint": "Yêu cầu: quốc gia | SL",
             },
             {
@@ -1310,7 +1310,7 @@ CATALOG = [
             {
                 "item_id": "TIKTOK_SCAN_450",
                 "group": "TIKTOK",
-                "name": "Tiktok người dùng - bao hạn chế 7 ngày -> TOP",
+                "name": "Tiktok người dùng - buff đô bao cắn phiên đầu -> TOP",
                 "price": "450.000đ",
                 "detail": "🔥 **Kênh TikTok Scan cổ – User thật, Follow thật**\n🎯  Live chay tốt, buff đô bao cắn phiên đầu \n💰 Giá: **450.000đ/kênh**\n\n🎁 **Đặc quyền khi mua kênh**\n👁️ Tặng 30 mắt Live miễn phí, tự động cộng view thật từ thiết bị của shop(Không phải buff) và duy trì lượng xem ổn định 24/24, hỗ trợ comment tăng tương tác theo yêu cầu của khách và bắt xu hướng thả rương\n\n✅ Live không giới hạn số phiên\n✅ **Bao gỡ vi phạm lần đầu:** Hỗ trợ mở khóa lỗi 3 ngày, 7 ngày hoặc 30 ngày miễn phí\n🔐 Đây là kênh Scan từ người dùng thật, khách bắt buộc đổi **Mail + Password** sau khi ngâm đủ 72 giờ. Quá 72 giờ kể từ lúc bàn giao mà chưa đổi thông tin, nếu bị back hoặc mất kênh, team không chịu trách nhiệm",
                 "require_hint": "Yêu cầu: quốc gia | SL",

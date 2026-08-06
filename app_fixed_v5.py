@@ -28,7 +28,7 @@ ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "@min_max18344").strip()  # @userna
 ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "7540411330"))  # optional - recommended
 SHOP_NAME = os.getenv("SHOP_NAME", "VUSMILE").strip()
 
-BANK_NAME = os.getenv("BANK_NAME", "VCB").strip()
+BANK_NAME = os.getenv("BANK_NAME", "OCB").strip()
 ACCOUNT_NAME = os.getenv("ACCOUNT_NAME", "PHAM DINH MINH VU").strip()
 ACCOUNT_NO = os.getenv("ACCOUNT_NO", "0812810305").strip()
 
@@ -1315,11 +1315,11 @@ def text_start():
 def text_payment():
     return (
         f"💳 **THÔNG TIN THANH TOÁN – {SHOP_NAME}**\n\n"
-        f"🏦 **Ngân hàng:** Vietcombank ({BANK_NAME})\n"
+        f"🏦 **Ngân hàng:** Ngân hàng Phương Đông ({BANK_NAME})\n"
         f"👤 **Chủ TK:** {ACCOUNT_NAME}\n"
         f"🔢 **STK:** {ACCOUNT_NO}\n\n"
         "✅ **NỘI DUNG CHUYỂN KHOẢN (BẮT BUỘC):**\n"
-        "`@username + TÊN SẢN PHẨM`\n\n"
+        "`Tra tien hoa`\n\n"
         "📌 Chuyển xong, chụp bill gửi admin để xác nhận nhanh."
     )
 

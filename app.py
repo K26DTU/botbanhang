@@ -496,23 +496,31 @@ for c in CATALOG:
 def kb_main():
     kb = types.InlineKeyboardMarkup(row_width=2)
     kb.add(
-        types.InlineKeyboardButton("🌐 TÊN MIỀN", callback_data="CAT|DOMAIN"),
+        types.InlineKeyboardButton("🔥 TIKTOK NỔI BẬT", callback_data="CAT|TIKTOK"),
     )
+    kb.add(
+        types.InlineKeyboardButton("🌐 TÊN MIỀN", callback_data="CAT|DOMAIN"),
+        types.InlineKeyboardButton("📦 MỤC KHÁC", callback_data="OTHER"),
+    )
+    return kb
+
+
+def kb_other():
+    kb = types.InlineKeyboardMarkup(row_width=2)
     kb.add(
         types.InlineKeyboardButton("📱 TELE", callback_data="CAT|TELE"),
         types.InlineKeyboardButton("📘 FACEBOOK", callback_data="CAT|FB"),
         types.InlineKeyboardButton("💬 ZALO", callback_data="CAT|ZALO"),
-        types.InlineKeyboardButton("🎵 TIKTOK", callback_data="CAT|TIKTOK"),
         types.InlineKeyboardButton("🖥️ LÀM WEB", callback_data="CAT|WEB"),
         types.InlineKeyboardButton("🤖🧠 BOT SPAM CHO SALE", callback_data="CAT|BOT"),
         types.InlineKeyboardButton("📲 OTP SĐT", callback_data="CAT|OTP"),
-        types.InlineKeyboardButton("🏦 STK MB BANK", callback_data="CAT|MB"),        
-        
+        types.InlineKeyboardButton("🏦 STK MB BANK", callback_data="CAT|MB"),
     )
     kb.add(
         types.InlineKeyboardButton("💳 Thanh toán", callback_data="PAY"),
         types.InlineKeyboardButton("📩 Admin", url=admin_url()),
     )
+    kb.add(types.InlineKeyboardButton("⏪ Quay lại menu", callback_data="BACK_MAIN"))
     return kb
 
 
@@ -553,7 +561,7 @@ def kb_payment():
 # =========================
 def text_start():
     return (
-        f"👋 **Chào mừng bạn đến với {SHOP_NAME}**\n\n"
+        "👋 **Chào mừng bạn đến với Store của VuSmile**\n\n"
         "✅ Bảng giá rõ ràng – hỗ trợ nhanh – xử lý gọn\n"
         "👉 Chọn danh mục bên dưới 👇"
     )
@@ -666,6 +674,15 @@ def on_callback(call):
 
         if data == "BACK_MAIN":
             send_with_optional_photo(chat_id, "START", text_start(), reply_markup=kb_main())
+            return
+
+        if data == "OTHER":
+            bot.send_message(
+                chat_id,
+                "📦 **MỤC KHÁC**\n\n👉 Chọn danh mục bên dưới 👇",
+                parse_mode="Markdown",
+                reply_markup=kb_other(),
+            )
             return
 
         if data == "PAY":

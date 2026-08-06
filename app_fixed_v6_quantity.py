@@ -1140,7 +1140,7 @@ CATALOG = [
         "title": "🌐 TÊN MIỀN",
         "desc": (
             "🌐 **Giá – 370K / 1 domain + free landing page có sẵn**\n\n📌 .VIP .TOP .LIVE .PRO .WIN .INFO .FUN    .US .CC\n📌 .CLICK  .LOVE  .ONLINE .ONL    .SHOP .STORE .TECH .XYZ .ONE .CASINO .SITE .LINK .LOL .ASIA .CLUB .RUN .BIO .NYC .PLUS "
-            "✅ Bảo hành suốt thời gian sử dụng\n"
+            "\n✅ Bảo hành suốt thời gian sử dụng\n"
             "✅ Đổi hậu đài ~ 3 phút\n"
             "👉 Chọn mục bên dưới 👇"
         ),

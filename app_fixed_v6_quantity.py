@@ -1139,7 +1139,7 @@ CATALOG = [
         "cat_id": "DOMAIN",
         "title": "🌐 TÊN MIỀN",
         "desc": (
-            "🌐 **Giá – 370K / 1 domain .CLICK  .PRO	.LIVE	.LOVE	.VIP    .ONLINE    .SHOP	.ORG	.STORE	.TECH	.XYZ	.FUN	**\n"
+            "🌐 **Giá – 370K / 1 domain + free landing page có sẵn**\n\n📌 .VIP .TOP .LIVE .PRO .WIN .INFO .FUN    .US .CC\n📌 .CLICK  .LOVE  .ONLINE .ONL    .SHOP .STORE .TECH .XYZ .ONE .CASINO .SITE .LINK .LOL .ASIA .CLUB .RUN .BIO .NYC .PLUS "
             "✅ Bảo hành suốt thời gian sử dụng\n"
             "✅ Đổi hậu đài ~ 3 phút\n"
             "👉 Chọn mục bên dưới 👇"
@@ -1148,7 +1148,7 @@ CATALOG = [
             {
                 "item_id": "DOMAIN_370",
                 "group": "TÊN MIỀN",
-                "name": "Tên miền đồng giá: .CLICK  .PRO	.LIVE	.LOVE	.VIP    .ONLINE    .SHOP	.ORG	.STORE	.TECH	.XYZ	.FUN",
+                "name": "Tên miền đồng giá 370k, free landing page có sẵn",
                 "price": "370.000đ",
                 "detail": (
                     "✅ Bảo hành suốt thời gian sử dụng\n"

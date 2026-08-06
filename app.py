@@ -824,14 +824,6 @@ CATALOG = [
         "desc": "🎵 **TIKTOK – Danh mục sản phẩm**\n👉 Chọn mục bên dưới 👇",
         "items": [
             {
-                "item_id": "TIKTOK_WHITE",
-                "group": "TIKTOK",
-                "name": "Tiktok trắng xây kênh ",
-                "price": "40.000đ",
-                "detail": "🎵 **Tiktok trắng để xây kênh**\n💰 Giá: **40.000đ**\n📌 Quốc gia: **Việt - US - UK**\n📌 Phù hợp xây kênh mới",
-                "require_hint": "Yêu cầu: quốc gia | SL",
-            },
-            {
                 "item_id": "TIKTOK_BUILD",
                 "group": "TIKTOK",
                 "name": "Tiktok xây kênh 1-2K follow ",
@@ -840,11 +832,44 @@ CATALOG = [
                 "require_hint": "Yêu cầu: quốc gia | SL",
             },
             {
+                "item_id": "TIKTOK_WHITE",
+                "group": "TIKTOK",
+                "name": "Tiktok US nhiều FL xây kênh, nhắn admin lấy link kênh và giá từng kênh tùy follow ",
+                "price": "300.000đ",
+                "detail": "🔥 **Kênh TikTok full chức năng Live**\n✅ Bao back – bao login\n🛡️ Bảo hành **1 đổi 1 trong 24 giờ** kể từ khi giao kênh nếu kênh chưa Live nhưng bị cấm Live vĩnh viễn\n⚠️ Không bảo hành trường hợp đang Live thì bị sập Live\n🛠️ Lưu ý: **Khách tự fix Live**\n💰 Giá: **150.000đ/kênh**"
+                "require_hint": "Yêu cầu: quốc gia | SL",
+            },
+            {
                 "item_id": "TIKTOK_LIVE",
                 "group": "TIKTOK",
-                "name": "Tiktok LIVE (Việt - US - UK)",
-                "price": "250.000đ",
+                "name": "Tiktok LIVE (Việt Cổ)",
+                "price": "150.000đ",
                 "detail": "🎵 **Tài khoản Tiktok LIVE**\n💰 Giá: **250.000đ**\n📌 Quốc gia: **Việt - US - UK**\n📌 Bao log, bao back, bao hạn chế 5p, bao ngắt.",
+                "require_hint": "Yêu cầu: quốc gia | SL",
+            },
+            {
+                "item_id": "TIKTOK_LIVE",
+                "group": "TIKTOK",
+                "name": "Tiktok LIVE (Việt Cổ) -> Bán chạy",
+                "price": "250.000đ",
+                "detail": "🔥 **TikTok Việt cổ – hỗ trợ Live & Ads**\n✅ **Bao back:** Sau khi mua, vui lòng đăng nhập trên điện thoại và ngâm tài khoản **3–4 ngày** để có thể thay đổi thông tin. Sau 4 ngày nếu khách chưa đổi thông tin và phát sinh vấn đề, khách tự chịu trách nhiệm\n📢 **Bao duyệt chiến dịch Ads đầu tiên**\n🛡️ **Bao hạn chế toàn vẹn 5 phút** cho phiên Live đầu tiên trong ngày\n⏱️ **Bao ngắt Live 30 phút** cho phiên Live đầu tiên trong ngày\n⚠️ Không áp dụng bao ngắt với Live buff quảng bá hoặc tài khoản quảng cáo Live chay\n❌ Không bao ngắt Ads hoặc việc Ads có cắn tiền hay không; kết quả phụ thuộc setup, IP và hệ thống TikTok quét vi phạm\n🕒 Tài khoản cần được sử dụng trong ngày, tính từ thời điểm bàn giao\n💰 Giá: **250.000đ/1 tài khoản Việt cổ**"
+                "require_hint": "Yêu cầu: quốc gia | SL",
+            },
+            {
+                "item_id": "TIKTOK_LIVE",
+                "group": "TIKTOK",
+                "name": "Tiktok người dùng - bao hạn chế 7 ngày -> TOP",
+                "price": "450.000đ",
+                "detail": "🔥 **Kênh TikTok Scan cổ – User thật, buff sẵn Follow kích Studio**\n🎯 Chuyên dùng cho Live chay\n💰 Giá: **450.000đ/kênh**\n\n🎁 **Đặc quyền khi mua kênh**\n👁️ Tặng 30 mắt Live miễn phí, tự động cộng view thật từ thiết bị của shop(Không phải buff) và duy trì lượng xem ổn định 24/24, hỗ trợ comment tăng tương tác theo yêu cầu của khách và bắt xu hướng thả rương\n\n🛡️ **Bảo hành Bao hạn chế trong 7 ngày**\n✅ Live không giới hạn số phiên\n✅ **Bao ngắt luồng:** Live chay thả rương dưới 60 phút bị ngắt sẽ được đổi kênh mới\n✅ **Bao kháng hạn chế:** Hỗ trợ kháng trong 60 phút, không khôi phục được sẽ đổi kênh mới\n✅ **Bao gỡ vi phạm lần đầu:** Hỗ trợ mở khóa lỗi 3 ngày, 7 ngày hoặc 30 ngày miễn phí\n✅ **Bao cấm Live vĩnh viễn:** Hỗ trợ kháng và kéo mở lại quyền Live\n\n⚠️ **Điều khoản từ chối bảo hành**\n❌ Với lỗi **Dịch vụ và hàng hóa bị cấm**, sau khi team đã hỗ trợ mở khóa lần đầu sẽ không bao ngắt Live cho các phiên tiếp theo. Các chính sách bảo hành khác vẫn áp dụng đủ 7 ngày\n🔐 Đây là kênh Scan từ người dùng thật, khách bắt buộc đổi **Mail + Password** sau khi ngâm đủ 72 giờ. Quá 72 giờ kể từ lúc bàn giao mà chưa đổi thông tin, nếu bị back hoặc mất kênh, team không chịu trách nhiệm"
+                "require_hint": "Yêu cầu: quốc gia | SL",
+            },
+            },
+            {
+                "item_id": "TIKTOK_LIVE",
+                "group": "TIKTOK",
+                "name": "Tiktok người dùng - bao hạn chế 7 ngày -> TOP",
+                "price": "500.000đ",
+                "detail": "🔥 **Kênh TikTok Scan cổ – User thật, buff sẵn Follow kích Studio**\n🎯 Chuyên dùng cho Live chay\n💰 Giá: **500.000đ/kênh**\n\n🎁 **Đặc quyền khi mua kênh**\n👁️ Tặng mắt Live miễn phí, tự động buff và duy trì lượng xem ổn định 24/24, hỗ trợ tăng tương tác và bắt xu hướng thả rương\n\n🛡️ **Bảo hành Bao Live trong 7 ngày**\n✅ Live không giới hạn số phiên\n✅ **Bao ngắt luồng:** Live chay thả rương dưới 60 phút bị ngắt sẽ được đổi kênh mới\n✅ **Bao mất đề xuất:** Phiên Live chay không buff, view thực tế dưới 100 sẽ được đổi kênh mới\n✅ **Bao kháng hạn chế:** Hỗ trợ kháng trong 60 phút, không khôi phục được sẽ đổi kênh mới\n✅ **Bao gỡ vi phạm lần đầu:** Hỗ trợ mở khóa lỗi 3 ngày, 7 ngày hoặc 30 ngày miễn phí\n✅ **Bao cấm Live vĩnh viễn:** Hỗ trợ kháng và kéo mở lại quyền Live\n✅ **Bao die tài khoản:** Tài khoản đã mở khóa nhưng tiếp tục bị quét sập sẽ được cấp lại 1 tài khoản mới\n\n⚠️ **Điều khoản từ chối bảo hành**\n❌ Với lỗi **Dịch vụ và hàng hóa bị cấm**, sau khi team đã hỗ trợ mở khóa lần đầu sẽ không bao ngắt Live cho các phiên tiếp theo. Các chính sách bảo hành khác vẫn áp dụng đủ 7 ngày\n🔐 Đây là kênh Scan từ người dùng thật, khách bắt buộc đổi **Mail + Password** sau khi ngâm đủ 72 giờ. Quá 72 giờ kể từ lúc bàn giao mà chưa đổi thông tin, nếu bị back hoặc mất kênh, team không chịu trách nhiệm"
                 "require_hint": "Yêu cầu: quốc gia | SL",
             },
         ],

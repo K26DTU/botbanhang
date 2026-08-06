@@ -2,8 +2,10 @@ import base64
 import io
 import json
 import os
+import queue
 import threading
 import time
+from collections import deque
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
@@ -67,6 +69,18 @@ bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 server = Flask(__name__)
 state_lock = threading.RLock()
 
+# Reuse one Google Sheets client per thread. googleapiclient clients are not
+# thread-safe, so each worker thread keeps its own client instance.
+_sheets_local = threading.local()
+_image_cache = {}
+
+# Telegram webhook must return HTTP 200 immediately. Slow Google Sheets/payOS
+# operations are processed by one background worker to preserve update order.
+_update_queue = queue.Queue(maxsize=1000)
+_recent_update_ids = set()
+_recent_update_order = deque(maxlen=2000)
+_recent_update_lock = threading.Lock()
+
 payos_client = None
 if PAYOS_CLIENT_ID and PAYOS_API_KEY and PAYOS_CHECKSUM_KEY:
     payos_client = PayOS(
@@ -98,11 +112,19 @@ def _service_account_info() -> dict:
 def sheets_service():
     if not GOOGLE_SHEET_ID:
         raise RuntimeError("Missing GOOGLE_SHEET_ID")
-    creds = service_account.Credentials.from_service_account_info(
-        _service_account_info(),
-        scopes=["https://www.googleapis.com/auth/spreadsheets"],
-    )
-    return build("sheets", "v4", credentials=creds, cache_discovery=False)
+
+    service = getattr(_sheets_local, "service", None)
+    if service is None:
+        creds = service_account.Credentials.from_service_account_info(
+            _service_account_info(),
+            scopes=["https://www.googleapis.com/auth/spreadsheets"],
+        )
+        service = build(
+            "sheets", "v4", credentials=creds, cache_discovery=False
+        )
+        _sheets_local.service = service
+
+    return service
 
 
 def ensure_google_sheets():
@@ -187,6 +209,7 @@ def update_sheet_row(title: str, headers: list[str], row_number: int, changes: d
 def set_image(key: str, file_id: str):
     key = key.upper().strip()
     with state_lock:
+        _image_cache[key] = file_id
         for row_number, row in sheet_rows(SHEET_IMAGES, IMAGES_HEADERS):
             if row.get("key", "").upper() == key:
                 update_sheet_row(SHEET_IMAGES, IMAGES_HEADERS, row_number, {
@@ -199,16 +222,37 @@ def set_image(key: str, file_id: str):
 
 
 def get_image(key: str):
+    key = key.upper().strip()
+
+    if key in _image_cache:
+        return _image_cache[key] or None
+
     if not GOOGLE_SHEET_ID:
         return None
+
     try:
-        key = key.upper().strip()
         for _, row in sheet_rows(SHEET_IMAGES, IMAGES_HEADERS):
-            if row.get("key", "").upper() == key:
-                return row.get("file_id", "").strip() or None
+            image_key = row.get("key", "").upper().strip()
+            file_id = row.get("file_id", "").strip()
+            if image_key:
+                _image_cache[image_key] = file_id
+
+        return _image_cache.get(key) or None
     except Exception as exc:
         print(f"[GET_IMAGE] error: {exc}")
-    return None
+        return None
+
+
+def load_image_cache():
+    if not GOOGLE_SHEET_ID:
+        return
+    try:
+        for _, row in sheet_rows(SHEET_IMAGES, IMAGES_HEADERS):
+            key = row.get("key", "").upper().strip()
+            if key:
+                _image_cache[key] = row.get("file_id", "").strip()
+    except Exception as exc:
+        print(f"[IMAGE_CACHE_INIT] error: {exc}")
 
 
 def parse_price_vnd(price: str):
@@ -729,6 +773,7 @@ def deliver_paid_order(order_code: int, amount: int, reference: str):
 # Initialize sheet structure when configuration is available.
 try:
     ensure_google_sheets()
+    load_image_cache()
 except Exception as exc:
     print(f"[GOOGLE_SHEETS_INIT] error: {exc}")
 
@@ -1034,11 +1079,11 @@ CATALOG = [
                 "group": "TIKTOK",
                 "name": "Tiktok US nhiều FL xây kênh, nhắn admin lấy link kênh và giá từng kênh tùy follow ",
                 "price": "300.000đ",
-                "detail": "🔥 **Kênh TikTok full chức năng Live**\n✅ Bao back – bao login\n🛡️ Bảo hành **1 đổi 1 trong 24 giờ** kể từ khi giao kênh nếu kênh chưa Live nhưng bị cấm Live vĩnh viễn\n⚠️ Không bảo hành trường hợp đang Live thì bị sập Live\n🛠️ Lưu ý: **Khách tự fix Live**\n💰 Giá: **150.000đ/kênh**"
+                "detail": "🔥 **Kênh TikTok full chức năng Live**\n✅ Bao back – bao login\n🛡️ Bảo hành **1 đổi 1 trong 24 giờ** kể từ khi giao kênh nếu kênh chưa Live nhưng bị cấm Live vĩnh viễn\n⚠️ Không bảo hành trường hợp đang Live thì bị sập Live\n🛠️ Lưu ý: **Khách tự fix Live**\n💰 Giá: **150.000đ/kênh**",
                 "require_hint": "Yêu cầu: quốc gia | SL",
             },
             {
-                "item_id": "TIKTOK_LIVE",
+                "item_id": "TIKTOK_LIVE_BASIC",
                 "group": "TIKTOK",
                 "name": "Tiktok LIVE (Việt Cổ)",
                 "price": "150.000đ",
@@ -1046,28 +1091,27 @@ CATALOG = [
                 "require_hint": "Yêu cầu: quốc gia | SL",
             },
             {
-                "item_id": "TIKTOK_LIVE",
+                "item_id": "TIKTOK_LIVE_VIET_OLD",
                 "group": "TIKTOK",
                 "name": "Tiktok LIVE (Việt Cổ) -> Bán chạy",
                 "price": "250.000đ",
-                "detail": "🔥 **TikTok Việt cổ – hỗ trợ Live & Ads**\n✅ **Bao back:** Sau khi mua, vui lòng đăng nhập trên điện thoại và ngâm tài khoản **3–4 ngày** để có thể thay đổi thông tin. Sau 4 ngày nếu khách chưa đổi thông tin và phát sinh vấn đề, khách tự chịu trách nhiệm\n📢 **Bao duyệt chiến dịch Ads đầu tiên**\n🛡️ **Bao hạn chế toàn vẹn 5 phút** cho phiên Live đầu tiên trong ngày\n⏱️ **Bao ngắt Live 30 phút** cho phiên Live đầu tiên trong ngày\n⚠️ Không áp dụng bao ngắt với Live buff quảng bá hoặc tài khoản quảng cáo Live chay\n❌ Không bao ngắt Ads hoặc việc Ads có cắn tiền hay không; kết quả phụ thuộc setup, IP và hệ thống TikTok quét vi phạm\n🕒 Tài khoản cần được sử dụng trong ngày, tính từ thời điểm bàn giao\n💰 Giá: **250.000đ/1 tài khoản Việt cổ**"
+                "detail": "🔥 **TikTok Việt cổ – hỗ trợ Live & Ads**\n✅ **Bao back:** Sau khi mua, vui lòng đăng nhập trên điện thoại và ngâm tài khoản **3–4 ngày** để có thể thay đổi thông tin. Sau 4 ngày nếu khách chưa đổi thông tin và phát sinh vấn đề, khách tự chịu trách nhiệm\n📢 **Bao duyệt chiến dịch Ads đầu tiên**\n🛡️ **Bao hạn chế toàn vẹn 5 phút** cho phiên Live đầu tiên trong ngày\n⏱️ **Bao ngắt Live 30 phút** cho phiên Live đầu tiên trong ngày\n⚠️ Không áp dụng bao ngắt với Live buff quảng bá hoặc tài khoản quảng cáo Live chay\n❌ Không bao ngắt Ads hoặc việc Ads có cắn tiền hay không; kết quả phụ thuộc setup, IP và hệ thống TikTok quét vi phạm\n🕒 Tài khoản cần được sử dụng trong ngày, tính từ thời điểm bàn giao\n💰 Giá: **250.000đ/1 tài khoản Việt cổ**",
                 "require_hint": "Yêu cầu: quốc gia | SL",
             },
             {
-                "item_id": "TIKTOK_LIVE",
+                "item_id": "TIKTOK_SCAN_450",
                 "group": "TIKTOK",
                 "name": "Tiktok người dùng - bao hạn chế 7 ngày -> TOP",
                 "price": "450.000đ",
-                "detail": "🔥 **Kênh TikTok Scan cổ – User thật, buff sẵn Follow kích Studio**\n🎯 Chuyên dùng cho Live chay\n💰 Giá: **450.000đ/kênh**\n\n🎁 **Đặc quyền khi mua kênh**\n👁️ Tặng 30 mắt Live miễn phí, tự động cộng view thật từ thiết bị của shop(Không phải buff) và duy trì lượng xem ổn định 24/24, hỗ trợ comment tăng tương tác theo yêu cầu của khách và bắt xu hướng thả rương\n\n🛡️ **Bảo hành Bao hạn chế trong 7 ngày**\n✅ Live không giới hạn số phiên\n✅ **Bao ngắt luồng:** Live chay thả rương dưới 60 phút bị ngắt sẽ được đổi kênh mới\n✅ **Bao kháng hạn chế:** Hỗ trợ kháng trong 60 phút, không khôi phục được sẽ đổi kênh mới\n✅ **Bao gỡ vi phạm lần đầu:** Hỗ trợ mở khóa lỗi 3 ngày, 7 ngày hoặc 30 ngày miễn phí\n✅ **Bao cấm Live vĩnh viễn:** Hỗ trợ kháng và kéo mở lại quyền Live\n\n⚠️ **Điều khoản từ chối bảo hành**\n❌ Với lỗi **Dịch vụ và hàng hóa bị cấm**, sau khi team đã hỗ trợ mở khóa lần đầu sẽ không bao ngắt Live cho các phiên tiếp theo. Các chính sách bảo hành khác vẫn áp dụng đủ 7 ngày\n🔐 Đây là kênh Scan từ người dùng thật, khách bắt buộc đổi **Mail + Password** sau khi ngâm đủ 72 giờ. Quá 72 giờ kể từ lúc bàn giao mà chưa đổi thông tin, nếu bị back hoặc mất kênh, team không chịu trách nhiệm"
+                "detail": "🔥 **Kênh TikTok Scan cổ – User thật, buff sẵn Follow kích Studio**\n🎯 Chuyên dùng cho Live chay\n💰 Giá: **450.000đ/kênh**\n\n🎁 **Đặc quyền khi mua kênh**\n👁️ Tặng 30 mắt Live miễn phí, tự động cộng view thật từ thiết bị của shop(Không phải buff) và duy trì lượng xem ổn định 24/24, hỗ trợ comment tăng tương tác theo yêu cầu của khách và bắt xu hướng thả rương\n\n🛡️ **Bảo hành Bao hạn chế trong 7 ngày**\n✅ Live không giới hạn số phiên\n✅ **Bao ngắt luồng:** Live chay thả rương dưới 60 phút bị ngắt sẽ được đổi kênh mới\n✅ **Bao kháng hạn chế:** Hỗ trợ kháng trong 60 phút, không khôi phục được sẽ đổi kênh mới\n✅ **Bao gỡ vi phạm lần đầu:** Hỗ trợ mở khóa lỗi 3 ngày, 7 ngày hoặc 30 ngày miễn phí\n✅ **Bao cấm Live vĩnh viễn:** Hỗ trợ kháng và kéo mở lại quyền Live\n\n⚠️ **Điều khoản từ chối bảo hành**\n❌ Với lỗi **Dịch vụ và hàng hóa bị cấm**, sau khi team đã hỗ trợ mở khóa lần đầu sẽ không bao ngắt Live cho các phiên tiếp theo. Các chính sách bảo hành khác vẫn áp dụng đủ 7 ngày\n🔐 Đây là kênh Scan từ người dùng thật, khách bắt buộc đổi **Mail + Password** sau khi ngâm đủ 72 giờ. Quá 72 giờ kể từ lúc bàn giao mà chưa đổi thông tin, nếu bị back hoặc mất kênh, team không chịu trách nhiệm",
                 "require_hint": "Yêu cầu: quốc gia | SL",
             },
-            },
             {
-                "item_id": "TIKTOK_LIVE",
+                "item_id": "TIKTOK_SCAN_500",
                 "group": "TIKTOK",
                 "name": "Tiktok người dùng - bao hạn chế 7 ngày -> TOP",
                 "price": "500.000đ",
-                "detail": "🔥 **Kênh TikTok Scan cổ – User thật, buff sẵn Follow kích Studio**\n🎯 Chuyên dùng cho Live chay\n💰 Giá: **500.000đ/kênh**\n\n🎁 **Đặc quyền khi mua kênh**\n👁️ Tặng mắt Live miễn phí, tự động buff và duy trì lượng xem ổn định 24/24, hỗ trợ tăng tương tác và bắt xu hướng thả rương\n\n🛡️ **Bảo hành Bao Live trong 7 ngày**\n✅ Live không giới hạn số phiên\n✅ **Bao ngắt luồng:** Live chay thả rương dưới 60 phút bị ngắt sẽ được đổi kênh mới\n✅ **Bao mất đề xuất:** Phiên Live chay không buff, view thực tế dưới 100 sẽ được đổi kênh mới\n✅ **Bao kháng hạn chế:** Hỗ trợ kháng trong 60 phút, không khôi phục được sẽ đổi kênh mới\n✅ **Bao gỡ vi phạm lần đầu:** Hỗ trợ mở khóa lỗi 3 ngày, 7 ngày hoặc 30 ngày miễn phí\n✅ **Bao cấm Live vĩnh viễn:** Hỗ trợ kháng và kéo mở lại quyền Live\n✅ **Bao die tài khoản:** Tài khoản đã mở khóa nhưng tiếp tục bị quét sập sẽ được cấp lại 1 tài khoản mới\n\n⚠️ **Điều khoản từ chối bảo hành**\n❌ Với lỗi **Dịch vụ và hàng hóa bị cấm**, sau khi team đã hỗ trợ mở khóa lần đầu sẽ không bao ngắt Live cho các phiên tiếp theo. Các chính sách bảo hành khác vẫn áp dụng đủ 7 ngày\n🔐 Đây là kênh Scan từ người dùng thật, khách bắt buộc đổi **Mail + Password** sau khi ngâm đủ 72 giờ. Quá 72 giờ kể từ lúc bàn giao mà chưa đổi thông tin, nếu bị back hoặc mất kênh, team không chịu trách nhiệm"
+                "detail": "🔥 **Kênh TikTok Scan cổ – User thật, buff sẵn Follow kích Studio**\n🎯 Chuyên dùng cho Live chay\n💰 Giá: **500.000đ/kênh**\n\n🎁 **Đặc quyền khi mua kênh**\n👁️ Tặng mắt Live miễn phí, tự động buff và duy trì lượng xem ổn định 24/24, hỗ trợ tăng tương tác và bắt xu hướng thả rương\n\n🛡️ **Bảo hành Bao Live trong 7 ngày**\n✅ Live không giới hạn số phiên\n✅ **Bao ngắt luồng:** Live chay thả rương dưới 60 phút bị ngắt sẽ được đổi kênh mới\n✅ **Bao mất đề xuất:** Phiên Live chay không buff, view thực tế dưới 100 sẽ được đổi kênh mới\n✅ **Bao kháng hạn chế:** Hỗ trợ kháng trong 60 phút, không khôi phục được sẽ đổi kênh mới\n✅ **Bao gỡ vi phạm lần đầu:** Hỗ trợ mở khóa lỗi 3 ngày, 7 ngày hoặc 30 ngày miễn phí\n✅ **Bao cấm Live vĩnh viễn:** Hỗ trợ kháng và kéo mở lại quyền Live\n✅ **Bao die tài khoản:** Tài khoản đã mở khóa nhưng tiếp tục bị quét sập sẽ được cấp lại 1 tài khoản mới\n\n⚠️ **Điều khoản từ chối bảo hành**\n❌ Với lỗi **Dịch vụ và hàng hóa bị cấm**, sau khi team đã hỗ trợ mở khóa lần đầu sẽ không bao ngắt Live cho các phiên tiếp theo. Các chính sách bảo hành khác vẫn áp dụng đủ 7 ngày\n🔐 Đây là kênh Scan từ người dùng thật, khách bắt buộc đổi **Mail + Password** sau khi ngâm đủ 72 giờ. Quá 72 giờ kể từ lúc bàn giao mà chưa đổi thông tin, nếu bị back hoặc mất kênh, team không chịu trách nhiệm",
                 "require_hint": "Yêu cầu: quốc gia | SL",
             },
         ],
@@ -1280,8 +1324,9 @@ def build_buy_text(from_user, group: str, product: str, price: str, require_hint
 # =========================
 @bot.message_handler(commands=["start"])
 def cmd_start(message):
-    notify_admin_start(message)
+    # Show the menu first; visitor logging can be slower because it writes to Sheets.
     send_with_optional_photo(message.chat.id, "START", text_start(), reply_markup=kb_main())
+    notify_admin_start(message)
 
 
 @bot.message_handler(commands=["getid"])
@@ -1479,48 +1524,68 @@ def payment_webhook():
         return jsonify({"message": "Invalid or failed webhook"}), 400
 
 
-# ✅ Telegram webhook endpoint
+def _remember_update(update_id: int) -> bool:
+    """Return False when Telegram retries an update already accepted."""
+    with _recent_update_lock:
+        if update_id in _recent_update_ids:
+            return False
+
+        if len(_recent_update_order) == _recent_update_order.maxlen:
+            oldest = _recent_update_order.popleft()
+            _recent_update_ids.discard(oldest)
+
+        _recent_update_order.append(update_id)
+        _recent_update_ids.add(update_id)
+        return True
+
+
+def _telegram_update_worker():
+    while True:
+        update = _update_queue.get()
+        try:
+            bot.process_new_updates([update])
+        except Exception as exc:
+            print(
+                f"[UPDATE WORKER] error "
+                f"update_id={getattr(update, 'update_id', '')}: {exc}"
+            )
+        finally:
+            _update_queue.task_done()
+
+
+threading.Thread(
+    target=_telegram_update_worker,
+    name="telegram-update-worker",
+    daemon=True,
+).start()
+
+
+# Telegram webhook endpoint. Return 200 immediately, then process the update
+# in order in the background. This prevents Telegram from retrying a slow
+# callback while Google Sheets or payOS is still responding.
 @server.post("/webhook")
 def telegram_webhook():
     try:
-        raw = request.get_data().decode("utf-8")
-        update = types.Update.de_json(raw)
-        bot.process_new_updates([update])
+        payload = request.get_json(force=True)
+        update_id = int(payload["update_id"])
+
+        if not _remember_update(update_id):
+            print(f"[WEBHOOK] duplicate update ignored: {update_id}")
+            return "OK", 200
+
+        update = types.Update.de_json(payload)
+
+        try:
+            _update_queue.put_nowait(update)
+        except queue.Full:
+            # Let Telegram retry later if the local queue is unexpectedly full.
+            with _recent_update_lock:
+                _recent_update_ids.discard(update_id)
+            print(f"[WEBHOOK] update queue full: {update_id}")
+            return "BUSY", 503
+
         return "OK", 200
-    except Exception as e:
-        print(f"[WEBHOOK] error: {e}")
-        # vẫn trả 200 để Telegram không retry spam
-        return "OK", 200
-
-@server.get("/setup-payos-webhook")
-def setup_payos_webhook():
-    try:
-        if not PUBLIC_BASE_URL:
-            return {
-                "success": False,
-                "error": "Thiếu biến môi trường PUBLIC_BASE_URL",
-            }, 500
-
-        if not PAYOS_CLIENT_ID or not PAYOS_API_KEY or not PAYOS_CHECKSUM_KEY:
-            return {
-                "success": False,
-                "error": "Thiếu cấu hình PAYOS_CLIENT_ID, PAYOS_API_KEY hoặc PAYOS_CHECKSUM_KEY",
-            }, 500
-
-        webhook_url = f"{PUBLIC_BASE_URL.rstrip('/')}/payment/webhook"
-
-        result = payos.webhooks.confirm(webhook_url)
-
-        return {
-            "success": True,
-            "message": "Đã đăng ký webhook payOS",
-            "webhook_url": webhook_url,
-            "result": str(result),
-        }, 200
-
     except Exception as exc:
-        print(f"[SETUP PAYOS WEBHOOK] error: {exc}")
-        return {
-            "success": False,
-            "error": str(exc),
-        }, 500
+        print(f"[WEBHOOK] invalid update: {exc}")
+        # Do not let malformed payloads retry forever.
+        return "OK", 200

@@ -343,106 +343,304 @@ def payment_markup(checkout_url: str, item_id: str):
     kb.add(types.InlineKeyboardButton("⏪ Quay lại danh mục", callback_data=f"BACKCAT|{item_id}"))
     return kb
 
+def find_active_order(user_id: int, item_id: str):
+    now = now_vn()
+
+    for row_number, row in sheet_rows(SHEET_ORDERS, ORDERS_HEADERS):
+        if str(row.get("user_id", "")).strip() != str(user_id):
+            continue
+
+        if str(row.get("item_id", "")).strip().upper() != item_id.upper():
+            continue
+
+        status = str(row.get("status", "")).strip().upper()
+
+        if status not in ("CREATING", "PENDING"):
+            continue
+
+        expires_raw = str(row.get("expires_at", "")).strip()
+
+        if expires_raw:
+            try:
+                expires_at = datetime.fromisoformat(expires_raw)
+
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=now.tzinfo)
+
+                if expires_at <= now:
+                    continue
+
+            except ValueError:
+                continue
+
+        return row_number, row
+
+    return None
 
 def create_payment_for_item(call, item_id: str):
     if not payos_client:
-        raise RuntimeError("Chưa cấu hình PAYOS_CLIENT_ID / PAYOS_API_KEY / PAYOS_CHECKSUM_KEY")
+        raise RuntimeError(
+            "Chưa cấu hình PAYOS_CLIENT_ID / PAYOS_API_KEY / PAYOS_CHECKSUM_KEY"
+        )
+
     if not PUBLIC_BASE_URL:
         raise RuntimeError("Chưa cấu hình PUBLIC_BASE_URL")
+
     if not GOOGLE_SHEET_ID:
         raise RuntimeError("Chưa cấu hình GOOGLE_SHEET_ID")
 
     found = ITEM_BY_ID.get(item_id)
+
     if not found:
-        bot.send_message(call.message.chat.id, "❌ Sản phẩm không tồn tại.")
+        bot.send_message(
+            call.message.chat.id,
+            "❌ Sản phẩm không tồn tại.",
+        )
         return
+
     _, item = found
-    amount = parse_price_vnd(item.get("price", ""))
+
+    amount = parse_price_vnd(
+        item.get("price", "")
+    )
+
     if not amount:
         bot.send_message(
             call.message.chat.id,
-            "⚠️ Tài nguyên này không được up sẵn trên bot, nhắn tele admin để nhận tài nguyên.",
+            (
+                "⚠️ Tài nguyên này không được up sẵn trên bot, "
+                "nhắn tele admin để nhận tài nguyên."
+            ),
             reply_markup=manual_resource_markup(item_id),
         )
         return
 
     with state_lock:
+        # Kiểm tra khách đã có đơn đang chờ cho sản phẩm này chưa
+        active_order = find_active_order(
+            call.from_user.id,
+            item_id,
+        )
+
+        if active_order:
+            _, existing_order = active_order
+
+            existing_status = str(
+                existing_order.get("status", "")
+            ).strip().upper()
+
+            existing_order_code = str(
+                existing_order.get("order_code", "")
+            ).strip()
+
+            checkout_url = str(
+                existing_order.get("checkout_url", "")
+            ).strip()
+
+            if existing_status == "PENDING" and checkout_url:
+                bot.send_message(
+                    call.message.chat.id,
+                    (
+                        "🧾 Bạn đang có một đơn chưa thanh toán "
+                        "cho sản phẩm này.\n\n"
+                        f"🔢 Mã đơn: `{existing_order_code}`\n"
+                        "👉 Bot gửi lại trang thanh toán hiện tại."
+                    ),
+                    parse_mode="Markdown",
+                    reply_markup=payment_markup(
+                        checkout_url,
+                        item_id,
+                    ),
+                )
+
+            else:
+                bot.send_message(
+                    call.message.chat.id,
+                    (
+                        "⏳ Đơn hàng của bạn đang được tạo.\n"
+                        "Vui lòng chờ vài giây rồi thử lại."
+                    ),
+                )
+
+            return
+
+        # Tạo mã đơn mới
         order_code = next_order_code()
-        reserved = reserve_resource(item_id, order_code, call.from_user)
+
+        # Giữ một tài nguyên trong kho
+        reserved = reserve_resource(
+            item_id,
+            order_code,
+            call.from_user,
+        )
+
         if not reserved:
             bot.send_message(
                 call.message.chat.id,
-                "⚠️ Tài nguyên này không được up sẵn trên bot, nhắn tele admin để nhận tài nguyên.",
+                (
+                    "⚠️ Tài nguyên này không được up sẵn trên bot, "
+                    "nhắn tele admin để nhận tài nguyên."
+                ),
                 reply_markup=manual_resource_markup(item_id),
             )
             return
+
         inventory_row, _resource = reserved
+
         created_at = now_vn()
-        expires_at = created_at + timedelta(minutes=PAYMENT_EXPIRE_MINUTES)
-        append_sheet_row(SHEET_ORDERS, ORDERS_HEADERS, {
-            "order_code": order_code,
-            "item_id": item_id,
-            "product_name": item["name"],
-            "amount": amount,
-            "status": "CREATING",
-            "chat_id": call.message.chat.id,
-            "user_id": call.from_user.id,
-            "username": user_tag(call.from_user),
-            "inventory_row": inventory_row,
-            "created_at": created_at.isoformat(timespec="seconds"),
-            "expires_at": expires_at.isoformat(timespec="seconds"),
-        })
-        order_row, _ = find_order(order_code)
+
+        expires_at = created_at + timedelta(
+            minutes=PAYMENT_EXPIRE_MINUTES
+        )
+
+        # Ghi đơn vào Google Sheet
+        append_sheet_row(
+            SHEET_ORDERS,
+            ORDERS_HEADERS,
+            {
+                "order_code": order_code,
+                "item_id": item_id,
+                "product_name": item["name"],
+                "amount": amount,
+                "status": "CREATING",
+                "chat_id": call.message.chat.id,
+                "user_id": call.from_user.id,
+                "username": user_tag(call.from_user),
+                "inventory_row": inventory_row,
+                "created_at": created_at.isoformat(
+                    timespec="seconds"
+                ),
+                "expires_at": expires_at.isoformat(
+                    timespec="seconds"
+                ),
+            },
+        )
+
+        order_found = find_order(order_code)
+
+        if not order_found:
+            # Nếu ghi đơn thất bại thì trả tài nguyên về kho
+            update_sheet_row(
+                SHEET_INVENTORY,
+                INVENTORY_HEADERS,
+                inventory_row,
+                {
+                    "status": "AVAILABLE",
+                    "order_code": "",
+                    "buyer_username": "",
+                    "buyer_id": "",
+                    "reserved_until": "",
+                },
+            )
+
+            raise RuntimeError(
+                f"Không tìm thấy đơn vừa tạo: {order_code}"
+            )
+
+        order_row, _ = order_found
 
         try:
             payment_request = CreatePaymentLinkRequest(
                 order_code=order_code,
                 amount=amount,
                 description=f"VS{order_code}",
-                cancel_url=f"{PUBLIC_BASE_URL}/payment/cancel",
-                return_url=f"{PUBLIC_BASE_URL}/payment/success",
-                expired_at=int(expires_at.timestamp()),
+                cancel_url=(
+                    f"{PUBLIC_BASE_URL.rstrip('/')}"
+                    "/payment/cancel"
+                ),
+                return_url=(
+                    f"{PUBLIC_BASE_URL.rstrip('/')}"
+                    "/payment/success"
+                ),
+                expired_at=int(
+                    expires_at.timestamp()
+                ),
             )
-            payment_link = payos_client.payment_requests.create(payment_request)
+
+            payment_link = (
+                payos_client.payment_requests.create(
+                    payment_request
+                )
+            )
+
             checkout_url = payment_link.checkout_url
             payment_link_id = payment_link.payment_link_id
             qr_text = payment_link.qr_code
-            update_sheet_row(SHEET_ORDERS, ORDERS_HEADERS, order_row, {
-                "status": "PENDING",
-                "checkout_url": checkout_url,
-                "payment_link_id": payment_link_id,
-            })
+
+            update_sheet_row(
+                SHEET_ORDERS,
+                ORDERS_HEADERS,
+                order_row,
+                {
+                    "status": "PENDING",
+                    "checkout_url": checkout_url,
+                    "payment_link_id": payment_link_id,
+                },
+            )
+
         except Exception as exc:
-            update_sheet_row(SHEET_INVENTORY, INVENTORY_HEADERS, inventory_row, {
-                "status": "AVAILABLE", "order_code": "", "buyer_username": "",
-                "buyer_id": "", "reserved_until": "",
-            })
-            update_sheet_row(SHEET_ORDERS, ORDERS_HEADERS, order_row, {
-                "status": "FAILED", "error": str(exc)[:500],
-            })
+            # Trả tài nguyên về trạng thái còn hàng
+            update_sheet_row(
+                SHEET_INVENTORY,
+                INVENTORY_HEADERS,
+                inventory_row,
+                {
+                    "status": "AVAILABLE",
+                    "order_code": "",
+                    "buyer_username": "",
+                    "buyer_id": "",
+                    "reserved_until": "",
+                },
+            )
+
+            # Đánh dấu đơn lỗi
+            update_sheet_row(
+                SHEET_ORDERS,
+                ORDERS_HEADERS,
+                order_row,
+                {
+                    "status": "FAILED",
+                    "error": str(exc)[:500],
+                },
+            )
+
             raise
 
+    # Tạo ảnh QR sau khi đã thoát khỏi state_lock
     qr_image = qrcode.make(qr_text)
+
     buffer = io.BytesIO()
     buffer.name = f"QR_{order_code}.png"
-    qr_image.save(buffer, format="PNG")
+
+    qr_image.save(
+        buffer,
+        format="PNG",
+    )
+
     buffer.seek(0)
+
     caption = (
         f"🧾 **ĐƠN HÀNG #{order_code}**\n\n"
         f"📦 **Sản phẩm:** {item['name']}\n"
         f"💰 **Thanh toán:** {amount:,}đ\n"
         f"⏳ **Thời hạn:** {PAYMENT_EXPIRE_MINUTES} phút\n\n"
-        "Quét QR để thanh toán. Khi ngân hàng xác nhận, bot sẽ tự động giao tài khoản/mật khẩu."
+        "Quét QR để thanh toán.\n"
+        "Khi ngân hàng xác nhận, bot sẽ tự động "
+        "giao tài khoản/mật khẩu."
     ).replace(",", ".")
+
     bot.send_photo(
         call.message.chat.id,
         buffer,
         caption=caption,
         parse_mode="Markdown",
-        reply_markup=payment_markup(checkout_url, item_id),
+        reply_markup=payment_markup(
+            checkout_url,
+            item_id,
+        ),
     )
 
-
+    
 def deliver_paid_order(order_code: int, amount: int, reference: str):
     with state_lock:
         found = find_order(order_code)
@@ -1149,10 +1347,23 @@ def on_callback(call):
     try:
         data = call.data
         chat_id = call.message.chat.id
-        bot.answer_callback_query(call.id)
+
+        # Không để callback hết hạn làm dừng chức năng mua hàng
+        try:
+            bot.answer_callback_query(call.id)
+        except Exception as ack_error:
+            print(
+                f"[CALLBACK ACK] ignored "
+                f"id={call.id} data={data}: {ack_error}"
+            )
 
         if data == "BACK_MAIN":
-            send_with_optional_photo(chat_id, "START", text_start(), reply_markup=kb_main())
+            send_with_optional_photo(
+                chat_id,
+                "START",
+                text_start(),
+                reply_markup=kb_main(),
+            )
             return
 
         if data == "OTHER":
@@ -1298,7 +1509,7 @@ def setup_payos_webhook():
 
         webhook_url = f"{PUBLIC_BASE_URL.rstrip('/')}/payment/webhook"
 
-        result = payos_client.webhooks.confirm(webhook_url)
+        result = payos.webhooks.confirm(webhook_url)
 
         return {
             "success": True,
